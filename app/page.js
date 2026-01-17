@@ -77,9 +77,7 @@ export default function Home() {
         return;
       }
 
-      // 检查并切换到Monad测试网
-      await switchToMonadTestnet();
-
+      // 只连接钱包，不自动切换网络
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
       const chainId = await window.ethereum.request({ method: 'eth_chainId' });
       
@@ -99,38 +97,62 @@ export default function Home() {
   };
 
   const switchToMonadTestnet = async () => {
+    if (!window.ethereum) {
+      alert('请安装MetaMask钱包');
+      return;
+    }
+
     try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: MONAD_TESTNET_CHAIN_ID }],
-      });
-    } catch (switchError) {
-      // 如果链不存在，尝试添加
-      if (switchError.code === 4902) {
-        try {
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [
-              {
-                chainId: MONAD_TESTNET_CHAIN_ID,
-                chainName: 'Monad Testnet',
-                nativeCurrency: {
-                  name: 'MON',
-                  symbol: 'MON',
-                  decimals: 18,
+      // 先尝试切换网络
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: MONAD_TESTNET_CHAIN_ID }],
+        });
+      } catch (switchError) {
+        // 如果链不存在（错误代码4902），询问用户是否添加
+        if (switchError.code === 4902) {
+          const shouldAdd = confirm('Monad测试网未添加到钱包，是否添加？');
+          if (!shouldAdd) {
+            return; // 用户取消，不添加网络
+          }
+          
+          // 用户确认后才添加网络
+          try {
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [
+                {
+                  chainId: MONAD_TESTNET_CHAIN_ID,
+                  chainName: 'Monad Testnet',
+                  nativeCurrency: {
+                    name: 'MON',
+                    symbol: 'MON',
+                    decimals: 18,
+                  },
+                  rpcUrls: ['https://testnet-rpc.monad.xyz'],
+                  blockExplorerUrls: ['https://testnet-explorer.monad.xyz'],
                 },
-                rpcUrls: ['https://testnet-rpc.monad.xyz'],
-                blockExplorerUrls: ['https://testnet-explorer.monad.xyz'],
-              },
-            ],
-          });
-        } catch (addError) {
-          console.error('添加Monad测试网失败:', addError);
-          throw addError;
+              ],
+            });
+          } catch (addError) {
+            console.error('添加Monad测试网失败:', addError);
+            alert('添加网络失败，请手动在钱包中添加Monad测试网');
+            throw addError;
+          }
+        } else {
+          // 其他错误，可能是用户拒绝了切换
+          console.error('切换网络失败:', switchError);
+          throw switchError;
         }
-      } else {
-        throw switchError;
       }
+      
+      // 网络切换成功后，更新chainId
+      const newChainId = await window.ethereum.request({ method: 'eth_chainId' });
+      setChainId(newChainId);
+    } catch (error) {
+      console.error('网络切换失败:', error);
+      // 不显示错误，让用户自行处理
     }
   };
 
